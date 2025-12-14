@@ -1,3 +1,4 @@
+
 # BitGold‑NEXUS Full Stack Project
 
 Backend: Node.js + Express + MongoDB + JWT
@@ -12,4 +13,4 @@ node server.js
 Run frontend:
 cd frontend
 npm install
-npm start# BitGold-Nexus-
+npm start
