@@ -1,0 +1,411 @@
+import React, { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
+import { MapPin, Phone } from "lucide-react";
+import Lottie from "lottie-react";
+import loadingAnim from "/expressway_loading.json";
+
+// ExpressWay Logistics - Single-file React component
+// Features added per request:
+// - Loader triggers only during data fetch / navigation
+// - Floating live-chat widget (client-side, in-memory)
+// - Simple Admin panel for regulating site (login, view messages, manage rates)
+
+// NOTE: This is a demo/local-only admin panel. Do NOT use for production authentication.
+
+function useLoader() {
+  const [loading, setLoading] = useState(false);
+  const wrap = async (fn) => {
+    try {
+      setLoading(true);
+      const res = await fn();
+      return res;
+    } finally {
+      setLoading(false);
+    }
+  };
+  return { loading, wrap, setLoading };
+}
+
+function FloatingChat({ onSendMessage }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("expressway_chat")) || [];
+    } catch {
+      return [];
+    }
+  });
+  const [text, setText] = useState("");
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
+  useEffect(() => {
+    localStorage.setItem("expressway_chat", JSON.stringify(messages));
+  }, [messages]);
+
+  const send = () => {
+    if (!text.trim()) return;
+    const msg = { id: Date.now(), from: "user", text: text.trim(), ts: new Date().toISOString() };
+    const next = [...messagesRef.current, msg];
+    setMessages(next);
+    setText("");
+    if (onSendMessage) onSendMessage(msg);
+    // simulate bot reply
+    setTimeout(() => {
+      const reply = { id: Date.now()+1, from: "agent", text: "Thanks — we'll get back to you shortly.", ts: new Date().toISOString() };
+      setMessages((m) => [...m, reply]);
+    }, 1500);
+  };
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50">
+      {open ? (
+        <div className="w-80 bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+          <div className="px-4 py-3 border-b dark:border-slate-700 flex items-center justify-between">
+            <div className="font-medium">ExpressWay Support</div>
+            <button onClick={() => setOpen(false)} className="text-sm">Close</button>
+          </div>
+          <div className="p-3 h-64 overflow-y-auto text-sm space-y-3">
+            {messages.map((m) => (
+              <div key={m.id} className={m.from === "user" ? "text-right" : "text-left"}>
+                <div className={m.from === "user" ? "inline-block bg-blue-500 text-white px-3 py-2 rounded-lg" : "inline-block bg-slate-100 dark:bg-slate-700 px-3 py-2 rounded-lg"}>
+                  {m.text}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">{new Date(m.ts).toLocaleString()}</div>
+              </div>
+            ))}
+            {messages.length === 0 && <div className="text-slate-400">No messages yet — say hi!</div>}
+          </div>
+          <div className="p-3 border-t dark:border-slate-700 flex gap-2">
+            <input value={text} onChange={(e) => setText(e.target.value)} className="flex-1 px-3 py-2 rounded-lg border dark:bg-slate-900" placeholder="Type a message..." />
+            <button onClick={send} className="px-3 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 text-white">Send</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setOpen(true)} className="w-14 h-14 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 shadow-lg flex items-center justify-center text-white">Chat</button>
+      )}
+    </div>
+  );
+}
+
+function AdminPanel({ onLogout }) {
+  // Simple admin state stored in localStorage for demo
+  const [rates, setRates] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("expressway_rates")) || [{ id: 1, route: "London - Lagos", price: "USD 1200" }];
+    } catch {
+      return [{ id: 1, route: "London - Lagos", price: "USD 1200" }];
+    }
+  });
+  const [messages, setMessages] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("expressway_chat")) || []; } catch { return []; }
+  });
+  useEffect(() => localStorage.setItem("expressway_rates", JSON.stringify(rates)), [rates]);
+  useEffect(() => localStorage.setItem("expressway_chat", JSON.stringify(messages)), [messages]);
+
+  const addRate = () => {
+    const route = prompt("Route (e.g. CityA - CityB)");
+    const price = prompt("Price (e.g. USD 1000)");
+    if (route && price) setRates((r) => [...r, { id: Date.now(), route, price }]);
+  };
+  const removeRate = (id) => setRates((r) => r.filter((x) => x.id !== id));
+
+  return (
+    <div className="p-6 bg-white dark:bg-slate-800 rounded-xl shadow">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xl font-semibold">Admin Dashboard</h3>
+        <div className="flex gap-2">
+          <button onClick={onLogout} className="px-3 py-2 rounded bg-slate-100 dark:bg-slate-700">Logout</button>
+        </div>
+      </div>
+
+      <section className="mt-6">
+        <h4 className="font-semibold">Rates</h4>
+        <div className="mt-3 grid gap-2">
+          {rates.map((r) => (
+            <div key={r.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-700 px-3 py-2 rounded">
+              <div>{r.route} — <span className="text-slate-500">{r.price}</span></div>
+              <div className="flex gap-2">
+                <button onClick={() => { const newPrice = prompt('New price', r.price); if (newPrice) setRates(rs => rs.map(x => x.id===r.id?{...x, price:newPrice}:x)); }} className="px-2 py-1 rounded bg-white dark:bg-slate-600">Edit</button>
+                <button onClick={() => removeRate(r.id)} className="px-2 py-1 rounded bg-red-500 text-white">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3">
+          <button onClick={addRate} className="px-3 py-2 rounded bg-gradient-to-r from-blue-500 to-cyan-400 text-white">Add Rate</button>
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <h4 className="font-semibold">Live Chat Messages</h4>
+        <div className="mt-3 max-h-48 overflow-y-auto space-y-2">
+          {messages.map((m) => (
+            <div key={m.id} className="p-2 bg-slate-50 dark:bg-slate-700 rounded">
+              <div className="text-sm">{m.text}</div>
+              <div className="text-xs text-slate-400">From: {m.from} — {new Date(m.ts).toLocaleString()}</div>
+            </div>
+          ))}
+          {messages.length === 0 && <div className="text-slate-400">No messages yet.</div>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export default function ExpressWayLogistics() {
+  // Loader that wraps fetches/navigation
+  const { loading, wrap } = useLoader();
+
+  // Simple client-side routing: page state
+  const [page, setPage] = useState("home");
+  const [auth, setAuth] = useState(() => localStorage.getItem("expressway_admin") === "1");
+
+  const navigate = async (to, opts = {}) => {
+    // If navigating to admin, require auth check
+    await wrap(async () => {
+      // simulate network delay (replace with real fetch/navigation)
+      await new Promise((res) => setTimeout(res, 700));
+      setPage(to);
+    });
+  };
+
+  const trackShipment = async (awb) => {
+    // example: fetch tracking info
+    return await wrap(async () => {
+      // replace with real API endpoint
+      await new Promise((r) => setTimeout(r, 900));
+      return { awb, status: "In transit", eta: "2025-12-20" };
+    });
+  };
+
+  const handleAdminLogin = () => {
+    const pass = prompt("Enter admin password (demo)");
+    if (pass === "admin123") {
+      localStorage.setItem("expressway_admin", "1");
+      setAuth(true);
+      setPage("admin");
+    } else {
+      alert("Wrong password (demo). Use: admin123");
+    }
+  };
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem("expressway_admin");
+    setAuth(false);
+    setPage("home");
+  };
+
+  // callback when chat message sent (to make available to admin)
+  const onSendMessage = (msg) => {
+    // already saved to localStorage by FloatingChat; we can additionally sync or notify
+    // For demo, no-op
+    console.log("Chat message sent:", msg);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-white to-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100">
+      {/* Global loader overlay */}
+      {loading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-40 h-40">
+            <Lottie animationData={loadingAnim} loop={true} />
+          </div>
+        </div>
+      )}
+
+      <FloatingChat onSendMessage={onSendMessage} />
+
+      {/* NAV */}
+      <header className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 p-2 shadow-md">
+            <img src="/logo.png" alt="ExpressWay Logistics Logo" className="w-10 h-10 object-contain" />
+          </div>
+
+          <div>
+            <a href="#" onClick={(e) => { e.preventDefault(); navigate('home'); }} className="flex items-baseline gap-2">
+              <span className="text-2xl font-extrabold">ExpressWay</span>
+              <span className="text-sm text-slate-400 dark:text-slate-300">Logistics</span>
+            </a>
+            <div className="text-xs text-slate-400">Reliable — Fast — Global</div>
+          </div>
+        </div>
+
+        <nav className="hidden md:flex items-center gap-6 text-sm">
+          <a href="#services" onClick={(e) => { e.preventDefault(); navigate('services'); }} className="hover:text-blue-400">Services</a>
+          <a href="#tracking" onClick={(e) => { e.preventDefault(); navigate('tracking'); }} className="hover:text-blue-400">Track</a>
+          <a href="#rates" onClick={(e) => { e.preventDefault(); navigate('rates'); }} className="hover:text-blue-400">Rates</a>
+          <a href="#contact" onClick={(e) => { e.preventDefault(); navigate('contact'); }} className="hover:text-blue-400">Contact</a>
+          <a href="#admin" onClick={(e) => { e.preventDefault(); if (auth) { navigate('admin'); } else { handleAdminLogin(); } }} className="hover:text-blue-400">Admin</a>
+        </nav>
+
+        <div className="flex items-center gap-3">
+          <a href="#contact" onClick={(e) => { e.preventDefault(); navigate('contact'); }} className="hidden md:inline-block px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-sm font-medium shadow">Get a Quote</a>
+          <button className="p-2 rounded-lg hover:bg-slate-100 md:hidden">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        {page === 'home' && (
+          <section className="grid md:grid-cols-2 gap-8 items-center">
+            <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
+              <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">Global freight & shipping made effortless</h1>
+              <p className="mt-4 text-lg text-slate-600 dark:text-slate-300">ExpressWay Logistics delivers reliable sea, air and road freight solutions with full visibility and competitive rates — anywhere in the world.</p>
+
+              <div className="mt-6 flex gap-3">
+                <button onClick={() => navigate('contact')} className="px-5 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 dark:from-blue-700 dark:to-cyan-500 backdrop-blur bg-opacity-80 shadow">Get a Quote</button>
+                <button onClick={() => navigate('tracking')} className="px-5 py-3 rounded-lg border border-slate-200 text-slate-700 dark:text-slate-200">Track Shipment</button>
+              </div>
+            </motion.div>
+
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow p-6">
+              <h3 className="text-lg font-semibold">Track your shipment</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Enter your airway bill (AWB) or tracking number below.</p>
+
+              <TrackForm onTrack={trackShipment} />
+
+              <div className="mt-6 border-t pt-4 text-sm">
+                <div className="flex items-center gap-3"><MapPin /> <div>Local pickup available — door-to-door service</div></div>
+                <div className="flex items-center gap-3 mt-2"><Phone /> <div>24/7 support: +1 (555) 123-4567</div></div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {page === 'tracking' && (
+          <section>
+            <h2 className="text-2xl font-bold">Track a Shipment</h2>
+            <TrackForm onTrack={trackShipment} />
+          </section>
+        )}
+
+        {page === 'services' && (
+          <section>
+            <h2 className="text-2xl font-bold">Our Services</h2>
+            <p className="text-slate-600 dark:text-slate-400">Complete logistics: sea, air, road, warehousing and customs clearance.</p>
+          </section>
+        )}
+
+        {page === 'rates' && (
+          <section>
+            <h2 className="text-2xl font-bold">Rates</h2>
+            <p className="text-slate-600 dark:text-slate-400">Request a personalized quote for accurate pricing.</p>
+          </section>
+        )}
+
+        {page === 'contact' && (
+          <section>
+            <h2 className="text-2xl font-bold">Contact Us</h2>
+            <ContactForm onSend={async (payload) => {
+              // simulate sending
+              await wrap(async () => { await new Promise(r => setTimeout(r, 800)); localStorage.setItem('expressway_last_contact', JSON.stringify(payload)); });
+              alert('Message sent — we will contact you shortly.');
+            }} />
+          </section>
+        )}
+
+        {page === 'admin' && auth && (
+          <section>
+            <AdminPanel onLogout={handleAdminLogout} />
+          </section>
+        )}
+
+        {!auth && page === 'admin' && (
+          <section>
+            <div className="p-6 bg-white dark:bg-slate-800 rounded-xl shadow">
+              <h3 className="text-lg font-semibold">Admin</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Please login to access the admin dashboard.</p>
+              <div className="mt-3">
+                <button onClick={handleAdminLogin} className="px-3 py-2 rounded bg-gradient-to-r from-blue-500 to-cyan-400 text-white">Login</button>
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+
+      <footer className="max-w-7xl mx-auto px-6 py-12">
+        <div className="grid md:grid-cols-3 gap-8">
+          <div>
+            <h4 className="font-bold text-xl">ExpressWay Logistics</h4>
+            <p className="text-slate-600 mt-2 dark:text-slate-400">ExpressWayLogistics.com — Freight forwarding • Customs • Warehousing • Last-mile</p>
+            <div className="mt-4 text-sm text-slate-600 dark:text-slate-400">Headquarters: 128 Harbor Road, London, UK</div>
+          </div>
+
+          <div>
+            <h5 className="font-semibold">Quick links</h5>
+            <ul className="mt-2 text-sm text-slate-600 dark:text-slate-400 space-y-2">
+              <li><a href="#services" onClick={(e)=>{e.preventDefault(); navigate('services');}}>Services</a></li>
+              <li><a href="#rates" onClick={(e)=>{e.preventDefault(); navigate('rates');}}>Rates</a></li>
+              <li><a href="#tracking" onClick={(e)=>{e.preventDefault(); navigate('tracking');}}>Track</a></li>
+              <li><a href="#contact" onClick={(e)=>{e.preventDefault(); navigate('contact');}}>Contact</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h5 className="font-semibold">Contact us</h5>
+            <form className="mt-4 grid gap-3" onSubmit={(e)=>{e.preventDefault(); alert('Message sent (demo)');}}>
+              <input placeholder="Name" className="px-4 py-3 border rounded-lg" />
+              <input placeholder="Email" className="px-4 py-3 border rounded-lg" />
+              <textarea placeholder="Message" className="px-4 py-3 border rounded-lg" rows={4}></textarea>
+              <button className="px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 text-white">Send message</button>
+            </form>
+          </div>
+        </div>
+
+        <div className="mt-8 border-t pt-6 text-sm text-slate-500 flex items-center justify-between">
+          <div>© {new Date().getFullYear()} ExpressWay Logistics — All rights reserved.</div>
+          <div className="flex items-center gap-4">
+            <a href="#">Privacy</a>
+            <a href="#">Terms</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function TrackForm({ onTrack }) {
+  const [awb, setAwb] = useState("");
+  const [result, setResult] = useState(null);
+  const handle = async (e) => {
+    e?.preventDefault();
+    if (!awb) return alert('Enter AWB');
+    const res = await onTrack(awb);
+    setResult(res);
+  };
+  return (
+    <form onSubmit={handle} className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <input value={awb} onChange={(e) => setAwb(e.target.value)} type="text" placeholder="AWB / Tracking #" className="col-span-2 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200" />
+      <button type="submit" className="px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 text-white">Track</button>
+      {result && (
+        <div className="col-span-3 mt-4 p-4 bg-slate-50 dark:bg-slate-800 rounded">
+          <div><strong>Status:</strong> {result.status}</div>
+          <div><strong>AWB:</strong> {result.awb}</div>
+          <div><strong>ETA:</strong> {result.eta}</div>
+        </div>
+      )}
+    </form>
+  );
+}
+
+function ContactForm({ onSend }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const handle = async (e) => {
+    e.preventDefault();
+    await onSend({ name, email, message, ts: new Date().toISOString() });
+    setName(''); setEmail(''); setMessage('');
+  };
+  return (
+    <form onSubmit={handle} className="mt-4 grid gap-3 max-w-xl">
+      <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="Name" className="px-4 py-3 border rounded-lg" />
+      <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="Email" className="px-4 py-3 border rounded-lg" />
+      <textarea value={message} onChange={(e)=>setMessage(e.target.value)} placeholder="Message" className="px-4 py-3 border rounded-lg" rows={4}></textarea>
+      <button className="px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 text-white">Send message</button>
+    </form>
+  );
+}
